@@ -1,0 +1,131 @@
+#install.packages("corehunter", dependencies = TRUE)
+#install.packages("rJava", dependencies = TRUE)
+library(rJava)
+rm(list=ls())
+options(java.parameters = "-Xmx8G")
+options()$width
+options()$"java.parameters"
+library(corehunter)
+#sys.env= Sys.getenv()
+#sys.env
+#install.packages("rJava", dependencies = TRUE)
+system("R CMD javareconf")
+#system("R CMD javareconf -e")
+######################################
+sys.env= Sys.getenv()
+sys.env
+#####################################
+###################################
+geno.path= "/usrhome/PBRM/energy/2021-10-14_Melon_Germplasm_exercise.csv"
+dist.path= "/usrhome/PBRM/energy/2021_10-28_melon_germplasm_EU_dist.csv"
+geno.data = read.csv(file = geno.path, header = TRUE, row.names = 1, stringsAsFactors = FALSE)
+geno.data[1:4, 1:4]
+dim(geno.data)
+dist.data = read.csv(file = dist.path, header = TRUE, row.names = 1, stringsAsFactors = FALSE)
+dist.data[1:4, 1:4]
+dim(dist.data)
+
+snp.mx = as.matrix(geno.data)
+snp.mx[geno.data=="0/0"]= 0L
+snp.mx[geno.data=="0/1"]= 1L
+snp.mx[geno.data=="1/1"]= 2L
+snp.mx[1:4, 1:4]
+rownames(snp.mx)= rownames(geno.data)
+colnames(snp.mx)= colnames(geno.data)
+
+my.data= coreHunterData(
+  genotypes(snp.mx, format = "biparental"),
+  distances(data= dist.data)
+)
+###########################
+obj.an<- objective("AN", "MR")
+obj.en<- objective("EN", "MR")
+
+N= c(24,48,72,96)
+opt= c("AN","EN")
+rep=seq(100)
+
+control.df=expand.grid("rep"=rep,"opt"=opt,N=N)
+ex3.sel = apply(control.df, 1, function(x){
+  objx = if (x["opt"] == "AN") obj.an else obj.en
+  sel.ind = sampleCore(my.data, obj= objx, size= as.numeric(x["N"]), mode= "fast", time = 5)
+  return(sel.ind$sel)
+})
+list("parm"=x,"sel"=sel.ind$"sel")
+
+ex3.eval= sapply(seq(nrow(control.df)), function(x){
+  param= control.df[x, ]
+  core= ex3.sel[[x]]
+  data.frame(param, 
+             "AN"= evaluateCore(core, my.data, objective = objective("AN", "MR")),
+             "EN"= evaluateCore(core, my.data, objective = objective("EN", "MR"))
+  )
+})
+####################################  
+
+evaluateCore(core, my.data, objective=objective("AN","MR"))
+evaluateCore(core, my.data, objective=objective("EN","MR"))
+evaluateCore(core, my.data, objective=objective("EE","MR"))
+###########################
+library(ggplot2)
+
+
+###################################
+#?ĥ|?D
+key=which(control.df$"N"==96)
+control.df[key, ]
+
+rep.n=2
+opt.n=2
+
+#sel.df=data.frame(rep=rep(seq(rep.n))
+                  
+                  
+                  ##############################
+obj <- objective("EN", "MR")
+core <- sampleCore(my.data, obj)
+coreen96 <- sampleCore(my.data, obj, mode="fast",time=10,size = 96)
+coreen72 <- sampleCore(my.data, obj, size = 72)
+coreen48 <- sampleCore(my.data, obj, size = 48)
+coreen24 <- sampleCore(my.data, obj, size = 24)
+corean96 <- sampleCore(my.data, obj, size = 96)
+corean72 <- sampleCore(my.data, obj, size = 72)
+corean48 <- sampleCore(my.data, obj, size = 48)
+corean24 <- sampleCore(my.data, obj, size = 24)
+corean2410 <- sampleCore(my.data, obj, size = 24 , steps = 10)
+                  
+                  ################################
+evaluateCore(coreen24, my.data, obj)
+evaluateCore(coreen24$"sel", my.data, obj)
+                  
+                  ##################################
+rep.time = seq_len(100)
+result.en = lapply(rep.time, function(x){
+  coreen24 = sampleCore(my.data, obj, size=24, mode="fast", steps=2)
+  return(coreen24$sel)
+})
+t0 = Sys.time()
+
+
+library(ggplot2)
+head(ex3.evalm)
+ggplot(ex3.evalm)+
+  geom_boxplot(aes(x= N, y= value, col= eval, group= paste(opt, N, eval)))+
+  facet_wrap(.~opt)
+#############################################
+key= which(control.df$"N"==96)
+control.df[key, ]
+
+rep.n= 2
+opt.n= 2
+
+sel.df= data.frame(rep= rep(seq(rep.n), each= 96),
+                   opt= rep(c("AN", "EN"), each= 96*rep.n),
+                   SID= unlist(ex3.sel[key]))
+head(sel.df); tail(sel.df)
+
+sel.wdf= dcast(sel.df, SID~opt, value.var = "SID", fun.aggregate = length)
+
+wei= seq(0+ 0.1, 1-0.1, 0.1)
+obj.weight= list(objective(type = "AN", measure = "MR", weight = wei), 
+                 objective(type = "EN", measure = "MR", weight = 1-wei))
