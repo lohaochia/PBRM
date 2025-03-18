@@ -1,0 +1,47 @@
+library(plotly)
+snp <- read.csv("2021-10-14_Melon_Germplasm_exercise.csv", 
+                row.names = 1, stringsAsFactors = FALSE)
+head(snp)
+SNPtype<-snp #?إߤ@?ӴߨӸ˫᭱???��R
+SNPnum <- as.matrix(SNPtype)
+dim(SNPnum)
+
+#?ഫ???i?H?]PCA???榡
+SNPnum[SNPtype=="0/0"]<- -1L #0/0?ഫ??-1
+SNPnum[SNPtype=="0/1"]<- 0L #0/1?ഫ??0
+SNPnum[SNPtype=="1/1"]<- 1L #1/1?ഫ??1
+mode(SNPnum) <- "integer"
+rownames(SNPnum)<-rownames(snp)
+colnames(SNPnum)<-colnames(SNPtype)
+
+SNP.scale=scale(SNPnum,center=TRUE,scale=T)
+SNP.scale[is.na(SNP.scale)]<-0
+A<-SNP.scale
+write.table(SNP.scale,file="1028.csv",sep=",",row.name=T)
+write.table(SNPnum,file="1028-2.csv",sep=",",row.name=T)
+head(A)
+SNP.scale <- SNP.scale[, colSums(SNP.scale != 0) > 0]
+PCprc <- prcomp(SNP.scale, center = TRUE, scale. = TRUE)
+prc <- data.frame(SID = sub(pattern="TARI_", replacement="", x=rownames(PCprc$x)),
+                  PCprc$x[,1:9], stringsAsFactors=FALSE, row.names=NULL)
+
+PEV=round((prc$sdev^2/sum(PCprc$sdev^2))*100,2)
+#?פJ?���???ƥsmelon.p
+melon.p=read.table(file.choose(),header = T)
+a=as.data.frame(melon.p[,c(1,3,4)]) #?uŪ??1.3.4.??
+b=merge(prc,melon.p,by="SID",sort=FALSE,all.x=TRUE) #?X?֪���???]?????ƨåsb
+
+#ø??
+plot_ly(data=b) %>%
+  add_markers(x= ~PC1,y= ~PC2,z= ~PC3,color=~origin,colors="Accent",symbol=~ssp,symbols=c(0:2),size=I(50))
+plot_ly(data=a,x= ~PC1,y= ~PC2,z= ~PC3,color=~col,colors="Accent",text= ~Taxa,size=I(100))
+library(qtl)
+plotMap( clean.fill.cro1,cro)
+text(x=rep(1.35,30), y=(as.numeric(cro$geno$`1`$map)+0),labels = names(cro$geno$`1`$map), adj = NULL,
+     pos = NULL, offset =3, vfont = NULL,
+     cex = 0.7, col = NULL, font = NULL)
+text(x=rep(0.66,20), y=(as.numeric(clean.fill.cro1$geno$`1`$map)+10),labels = names(clean.fill.cro1$geno$`1`$map), adj = NULL,
+     pos = NULL, offset = 0.5, vfont = NULL,
+     cex = 0.7, col =NULL, font = NULL)
+
+
