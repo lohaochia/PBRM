@@ -1,0 +1,487 @@
+rm(list=ls())
+setwd("C:/Users/user/OneDrive/?ୱ")
+##############################################################
+# R code for QTL mapping
+# Master's course in "Methodolody in Plant Breeding"
+# Department of Agronomy, National Taiwan university
+#
+# Based on "R code for "A shorter tour of R/qtl"" by Karl W Broman
+# downloaded from http://www.rqtl.org/tutorials/rqtltour2.R
+#
+# Modified by Yung-Fen Huang 
+#
+# November 2018 - updated on December 2020, December 2021
+##############################################################
+
+
+############################################################
+# Preliminaries
+############################################################
+library(qtl)
+
+# Have a look of the function for data import
+?read.cross
+
+############################################################
+# Data import
+############################################################
+# Please be aware that file path needs to be modified according to yours
+#
+# Akman et al. (2017)
+# The original file seems far from direct input of QTL cartographer
+# It may be easier to re-format the data according to R/qtl format
+# HYF personally perfer csvs format for its clarity
+cro <- read.cross(format= "csvs", genfile = "geno.csv", phefile = "pheno.csv", 
+                  na.strings=c("-","NA"), genotypes=c("A","B"), estimate.map=FALSE, 
+                  map.function= "kosambi", crosstype = "riself") 
+
+# How do you find which mapping function that the author used?
+oric = read.cross(format = "csv","", file = "test.csv", na.strings="na",
+                  map.function = "kosambi",genotypes=c("AA","BB","AB"), alleles=c("A","B"))
+cro=oric
+############################################################
+# Summaries
+############################################################
+summary(cro)
+
+nind(cro)
+nchr(cro)
+totmar(cro)
+nmar(cro)
+nphe(cro)
+phenames(cro)
+
+plot(cro)
+geno.image(cro)
+
+plotMissing(cro)
+plotMap(cro)
+plotPheno(cro, pheno.col=1)
+plotPheno(cro, pheno.col=2)
+plotPheno(cro, pheno.col=3)
+plotPheno(cro, pheno.col=4)
+plotPheno(cro, pheno.col=5)
+plotPheno(cro, pheno.col=6)
+plotPheno(cro, pheno.col=7)
+
+# Are you going to use the data as they are or do some cleaning?
+##===============================================##
+## Examine the marker data using a figure
+##===============================================##
+plotMissing(cro)
+
+# Draw missing data per individual and per marker
+par(mfrow=c(1,2), las=1, cex=0.8)
+plot(ntyped(cro), ylab="No. typed markers", main="No. genotypes by individual")
+plot(ntyped(cro, "mar"), ylab="No. typed individuals",
+     main="No. genotypes by marker")  
+
+## What do you observe?
+
+##===============================================##
+## Identify duplicate individuals (if any)
+##===============================================##
+cg <- comparegeno(cro)
+par(mar=c(4.1,4.1,0.1,0.6),las=1)
+hist(cg[lower.tri(cg)], breaks=seq(0, 1, len=101), xlab="No. matching genotypes",
+     main="")
+rug(cg[lower.tri(cg)]) 
+summary(cg)
+
+## What would you say?
+
+
+##===============================================##
+## Identify individuals with a lot of missing data
+##===============================================##
+na.ratio.ind = (nmissing(cro, what = "ind"))/totmar(cro)
+summary(na.ratio.ind)
+hist(na.ratio.ind) 
+
+## Would you remove individuals?
+
+
+##===============================================##
+## Remove parents
+##===============================================##
+tokeep = getid(cro)
+
+## Have a look at the individual names
+length(tokeep) #95
+tokeep
+
+## Remove parents
+tokeep = tokeep[-which(tokeep %in% c("N3879", "N3880"))]
+
+length(tokeep) #93
+
+## Save a copy of the original cross data
+cro.ori = cro
+
+## If you want to remove some individuals you can use the following:
+cro <- subset(cro, ind= tokeep) 
+# In real life, you may want to remove individuals with more missing data, then you will need to do other things
+# You can also go back to the tutorial of R/qtl to see their other way of doing ## code chunk number 16
+
+##===============================================##
+## Identify duplicate markers (if any)
+##===============================================##
+print(dup <- findDupMarkers(cro, exact.only=FALSE))
+
+
+##========================================================##
+## Check for segregation distorsion within each locus
+##========================================================##
+gt <- geno.table(cro)
+gt[gt$P.value < 0.05/totmar(cro),]  # Is it necessary to remove them? why?
+
+
+##========================================================##
+## Check for genotypic frequency within individuals
+##========================================================##
+g = pull.geno(cro)
+
+# Have a look at g
+g[1:6, 1:6]
+
+gfreq <- apply(g, 1, function(a) table(factor(a, levels=1:2)))
+gfreq <- t(t(gfreq) / colSums(gfreq))
+
+par(mfrow=c(1,2), las=1)
+for(i in 1:2)
+  plot(gfreq[i,], ylab="Genotype frequency", main=c("AA", "BB")[i],
+       ylim=c(0,1))
+
+## What's your thought?
+
+##========================================================##
+## Check for genotyping error
+##========================================================##
+cro = calc.errorlod(cro, error.prob=0.01, map.function= "kosambi", version="old")
+top.errorlod(cro, cutoff = 0)
+hist(top.errorlod(cro, cutoff = 0)$errorlod)
+
+# Remove possible genotypic error
+clean.cro = cro
+
+toperr = top.errorlod(cro, cutoff=0)
+
+for(j in 1:nrow(toperr)) 
+{
+  chr <- toperr$chr[j]
+  id <- toperr$id[j]
+  mar <- toperr$marker[j]
+  clean.cro$geno[[chr]]$data[clean.cro$pheno$id==id, mar] <- NA
+}
+
+rm(toperr)
+
+pdf("geno_ori.pdf")
+geno.image(cro)
+dev.off()
+
+pdf("geno_clean.pdf")
+geno.image(clean.cro)
+dev.off()
+
+clean.fill.cro = clean.cro
+clean.fill.cro = fill.geno(clean.fill.cro, method="argmax", map.function="kosambi")
+
+pdf("geno_clean_fill.pdf")
+geno.image(clean.fill.cro)
+dev.off()
+
+############################################################
+# Construction of the linkage map with "clean data"
+############################################################
+##========================================================##
+## Keep a copy of the original map
+##========================================================##
+map0 = pull.map(cro)
+
+##========================================================##
+## Estimate pair-wise recombination fraction
+##========================================================##
+clean.fill.cro = est.rf(clean.fill.cro1)
+
+##========================================================##
+## Group markers
+##========================================================##
+lg.cf <- formLinkageGroups(clean.fill.cro, max.rf=0.35, min.lod=3)
+table(lg.cf[,1], lg.cf[,2])
+## Original		New
+## 	1		4, 5
+##	2		2
+##	3		6, 7
+##	4		3
+##	5		1
+
+clean.fill.cro1 <- formLinkageGroups(clean.fill.cro, max.rf=0.35, min.lod=3, reorgMarkers= TRUE)
+clean.fill.cro1 <- orderMarkers(clean.fill.cro1, use.ripple = TRUE, map.function = "kosambi")
+cf.mapT <- est.map(clean.fill.cro1)
+
+nmar(cro)
+nmar(clean.fill.cro1)
+summary.map(clean.fill.cro1)
+
+### Concatenate LG of the same chr into 1 LG
+## 5 + 4
+t0 = markernames(clean.fill.cro1, chr =4)
+for(i in 1:length(t0)) {clean.fill.cro1 = movemarker(clean.fill.cro1, marker = t0[i], newchr = 5)}
+
+## 6 + 7 (then flip the order)
+t0 = markernames(clean.fill.cro1, chr =7)
+for(i in 1:length(t0)) {clean.fill.cro1 = movemarker(clean.fill.cro1, marker = t0[i], newchr = 6)}
+
+rm(t0)
+
+summary.map(clean.fill.cro1)
+
+## Rename the chr based on actual chromosome names
+names(clean.fill.cro1$geno) = c("5", "2", "4","1", "3")
+
+# Order genotypic data according to the chr
+clean.fill.cro1$geno = clean.fill.cro1$geno[order(names(clean.fill.cro1$geno))]
+
+plotMap(cro, clean.fill.cro1)
+
+clean.fill.cro1 = flip.order(clean.fill.cro1, chr = 3)
+############################################################################################################
+#################################################################################################################
+## Re-order markers for the reconstructed linkage groups 1 and 3
+clean.fill.cro1 <- orderMarkers(cro, use.ripple = TRUE, map.function = "kosambi")
+plotMap(cro, clean.fill.cro1)
+clean.fill.cro1 = flip.order(clean.fill.cro1, chr = c(1,3))
+
+summary.map(cro.ori)
+summary.map(clean.fill.cro1)
+
+
+lg <- formLinkageGroups(cro, max.rf=0.35, min.lod=6)
+head(lg)
+table(lg[,2])
+# Does this match to your expectation?
+# If not, please change the parameters to better fit your expectation
+
+
+cro1 <- formLinkageGroups(cro, max.rf=0.3, min.lod=6, reorgMarkers= TRUE)
+
+
+## Using cro's LG nomenclature for cro1
+#cro1$geno = cro1$geno[c(1,4,3,5,2)]
+#nmar(cro1)
+#names(cro1$geno) = c("1", "2", "3", "4", "5")
+
+## Change rf order in cro1
+#cro1$rf = cro1$rf[c(1:90, 238:295, 171:237, 296:348, 91:170),c(1:90, 238:295, 171:237, 296:348, 91:170)]
+#cro1$rf[91:95, 91:95]
+
+plotRF(cro1)
+plotRF(cro)
+
+#========================================================##
+## Order markers
+##========================================================##
+system.time(revcross <- orderMarkers(cro, chr = 1, use.ripple = FALSE)) 
+# on YFH's computer: 0.29 sec Core Intel i7-4790K@4GHz; 32G
+
+system.time(rp4 <- ripple(revcross, chr = 1, map.function = "kosambi"))
+# on YFH's computer: 0.02 sec
+
+system.time(revcross <- orderMarkers(cro1, chr = 1, use.ripple = TRUE, map.function = "kosambi")) 
+# on YFH's computer: 12.28 sec
+
+system.time(cro1 <- orderMarkers(cro1, use.ripple = TRUE, map.function = "kosambi")) #53.14 sec
+system.time(mapT <- est.map(cro1)) #0.15 sec
+
+
+plotMap(cro1,revcross)
+
+## Compare your map and the original map
+## You need to match LG name
+## ==> What are you going to do?
+
+
+############################################################
+## Data examination 
+############################################################
+## We have done this at the very begining of the mapping process
+## You have done a in-depth check for genotypic data before the construction of the linkage map
+## Now, let us go back to the phenotypic data before QTL mapping
+
+nphe(cro) # No. of phenotype (including "ind")
+phenames(cro) # trait name
+
+
+## A graphical summary of the cross object
+plot(cro)
+
+## You may want to see a larger figure
+## One option:
+
+pdf("summary_cro.pdf")
+plotMissing(cro)
+plotMap(cro)
+for (i in 1:7) {plotPheno(cro, pheno.col=i)}
+dev.off()
+
+## Observe the phenotypes, what would you say about the distribution and the value?
+## Why do they look such? Can you find some information in the original paper or on the data website?
+## Are you going to use the data as they are or do some cleaning?
+
+## If you have made decisions on the genotypic data and phenotypic data to use, 
+## then we can proceed to the QTL mapping.
+
+
+############################################################
+# Single-QTL analysis
+############################################################
+cro <- calc.genoprob(cro, step=1)
+
+out.em <- scanone(clean.fill.cro, pheno.col= 1, method="em") # use EM algorithme (the original one)
+
+summary(out.em) # use ?summary.scanone to see the meaning of the output
+str(out.em)	# Check what you have produced
+head(out.em)
+
+out.hk <- scanone(cro,  pheno.col= 1, method="hk")  # A faster method
+
+#---------------------------------------------------------#
+# Compare the results between EM and HK
+#---------------------------------------------------------#
+pdf("EM_HK.pdf")
+for( i in 1:7)
+{
+  plot(out.em, col="blue", lodcolumn=i, main = names(out.em)[i+2])
+  plot(out.hk, col="red" , lodcolumn=i, lty = 2, add=TRUE)
+  legend("topleft", legend = c("EM", "HK"), bty = "n", lty = c(1,2), lwd = 2, col = c("blue", "red"))
+}
+
+dev.off()
+
+## What do you think about these two methods?
+
+
+## Test of another method
+cro <- sim.geno(cro, step=1, n.draws=64)
+out.imp <- scanone(cro, method="imp", pheno.col = 1:7) 
+
+#------------------------------------------------------------------#
+# Compare the results between EM and imputation (+HK if you want)
+#------------------------------------------------------------------#
+pdf("EM_IMP.pdf")
+for( i in 1:7)
+{
+  plot(out.em, col="blue", lodcolumn=i, main = names(out.em)[i+2])
+  plot(out.imp, col="orange" , lodcolumn=i, lty = 2, add=TRUE)
+  legend("topleft", legend = c("EM", "IMP"), bty = "n", lty = c(1,2), lwd = 2, col = c("blue", "orange"))
+}
+
+dev.off()
+
+
+#------------------------------------------------------------------#
+# Permutation tests
+#------------------------------------------------------------------#
+# Let us take a faster calculation
+system.time(operm.hk <- scanone(cro, method="hk", n.perm=1000, pheno.col = 1:7)) 
+#123.1 sec for Akman for all 7 traits and the full data set
+
+## Have a look of the object
+plot(operm.hk, lodcolumn = 1 )
+
+summary(operm.hk, alpha=c(0.05, 0.2))
+
+summary(out.hk, format = "allpheno", perms = operm.hk, alpha = 0.05)
+summary(out.hk, format = "tabByCol", perms = operm.hk, alpha = 0.05)
+
+pdf("HK_SIM.pdf")
+for( i in 1:7)
+{
+  plot(out.hk, lodcolumn=i, main = names(out.em)[i+2])
+  add.threshold(out.hk, lodcolumn=i, perms = operm.hk, alpha = 0.05)
+}
+dev.off()
+
+# Permutation for EM
+system.time(operm.em <- scanone(cro, method="em", n.perm=1000, pheno.col = 1:7)) 
+#  334 sec in HYF's PC 
+
+
+############################################################
+# Interval estimates of QTL location
+############################################################
+lodint(out.hk, chr = 1, drop=1.5)
+bayesint(out.hk, chr=1, prob=0.95)
+
+lodint(out.hk, chr=1, expandtomarkers=TRUE)
+bayesint(out.hk, chr=1, prob=0.95, expandtomarkers=TRUE)
+
+lodint(out.hk, chr=1, drop=2, lodcolumn=1)
+bayesint(out.hk, chr=1, prob=0.99)
+
+
+############################################################
+# QTL effects
+############################################################
+## A way to look into the marker effect 
+max(out.hk, lodcolumn=1)
+mar <-  find.marker(cro, chr=1, pos=151)
+plotPXG(cro, marker=mar)
+
+effectplot(cro, mname1=mar)
+effectplot(cro, mname1="1@151")
+
+
+
+############################################################
+# Two-dimensional, two-QTL scans
+############################################################
+cro2 <- calc.genoprob(cro, step=2)
+out2 <- scantwo(cro2, method="hk")
+
+plot(out2)
+plot(out2, lower="fv1")
+plot(out2, lower="fv1", upper="av1")
+
+system.time(operm2 <- scantwo(cro2, method="hk", n.perm=1000)) # in batch mode, so it is faster: 79.04 sec
+
+summary(out2, perms=operm2, alpha=0.2, pvalues=TRUE)
+
+############################################################
+# Multiple-QTL analyses
+############################################################
+# I recommend you to follow the tutorial on the R/qtl webpage "New functions for exploring multiple-QTL models"
+qtl <- makeqtl(cro, chr=c(2,4,5), pos=c(10,12,84), what="prob")
+
+out.fq <- fitqtl(cro, qtl=qtl, method="hk")
+summary(out.fq)
+
+summary(fitqtl(cro, qtl=qtl, method="hk", get.ests=TRUE, dropone=FALSE))
+
+out.fqi <- fitqtl(cro, qtl=qtl, method="hk", formula=y~Q1+Q2+Q3 + Q1:Q3 + Q2:Q3)
+summary(out.fqi)
+
+addint(cro, qtl=qtl, method="hk")
+
+rqtl <- refineqtl(cro, qtl=qtl, method="hk")
+rqtl
+
+summary(out.fqr <- fitqtl(cro, qtl=rqtl, method="hk"))
+
+plotLodProfile(rqtl)
+
+plot(out.hk, chr=c(2, 4, 5), col="red", add=TRUE)
+
+out.aq <- addqtl(cro, qtl=rqtl, method="hk")
+
+plot(out.aq)
+
+print(pen <- calc.penalties(operm2))
+
+out.sq <- stepwiseqtl(cro, max.qtl=10, penalties=pen, method="hk", verbose=2)
+out.sq
+
+
+
+save.image("r_akman2.RData")
